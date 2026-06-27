@@ -1,0 +1,120 @@
+# Release automation for gridcap.
+#
+# Triggered by pushing a tag like `v0.2.0` (or run manually via the Actions tab).
+# It builds + tests the release binary on Apple Silicon, packages it, publishes the
+# GitHub Release with the tarball attached, then updates the Homebrew tap formula
+# (version + url + sha256) so `brew upgrade` picks up the new version.
+#
+# Cutting a release:
+#   1. Bump the version in source (GridCap.swift `version:`, MCPCommand server version,
+#      plugin/.claude-plugin/plugin.json, .claude-plugin/marketplace.json).
+#   2. Commit, then:  git tag -a v0.2.0 -m "gridcap 0.2.0" && git push origin v0.2.0
+#
+# Required one-time setup for the tap update step:
+#   Create a fine-grained Personal Access Token with **Contents: Read and write** on the
+#   CodyAMaughan/homebrew-tap repo, and save it on THIS repo as an Actions secret named
+#   HOMEBREW_TAP_TOKEN (Settings → Secrets and variables → Actions → New repository secret).
+#   Without it, the release still publishes; only the tap auto-update is skipped.
+
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)release, e.g. v0.1.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15 # Apple Silicon, ships Swift 6 (required by the MCP SDK)
+    steps:
+      - name: Check out the tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Show toolchain
+        run: swift --version
+
+      - name: Resolve version
+        id: version
+        run: |
+          REF="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${REF#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing version $VERSION"
+
+      - name: Build (release)
+        run: swift build -c release
+
+      - name: Test
+        run: swift test
+
+      - name: Verify binary version matches tag
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          BIN_VERSION="$(.build/release/gridcap --version)"
+          echo "binary reports: $BIN_VERSION  / tag: $VERSION"
+          if [ "$BIN_VERSION" != "$VERSION" ]; then
+            echo "::error::Binary --version ($BIN_VERSION) does not match tag ($VERSION). Bump the version in source before tagging."
+            exit 1
+          fi
+
+      - name: Package arm64 binary
+        id: package
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          ASSET="gridcap-${VERSION}-macos-arm64.tar.gz"
+          tar -C .build/release -czf "$ASSET" gridcap
+          SHA="$(shasum -a 256 "$ASSET" | awk '{print $1}')"
+          echo "asset=$ASSET" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Packaged $ASSET ($SHA)"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: gridcap ${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          files: ${{ steps.package.outputs.asset }}
+
+      - name: Update Homebrew tap formula
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA: ${{ steps.package.outputs.sha256 }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "::warning::HOMEBREW_TAP_TOKEN not set — skipping tap update. Update Formula/gridcap.rb manually (version $VERSION, sha256 $SHA)."
+            exit 0
+          fi
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/CodyAMaughan/homebrew-tap.git" tap
+          cd tap
+          FORMULA="Formula/gridcap.rb"
+          ASSET="gridcap-${VERSION}-macos-arm64.tar.gz"
+          URL="https://github.com/CodyAMaughan/gridcap/releases/download/v${VERSION}/${ASSET}"
+          /usr/bin/sed -i '' -E \
+            -e "s|^  version \".*\"|  version \"${VERSION}\"|" \
+            -e "s|url \"https://github.com/CodyAMaughan/gridcap/releases/download/[^\"]+\"|url \"${URL}\"|" \
+            -e "s|^      sha256 \".*\"|      sha256 \"${SHA}\"|" \
+            "$FORMULA"
+          echo "----- updated formula -----"; cat "$FORMULA"
+          if git diff --quiet; then
+            echo "Formula already up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "gridcap ${VERSION}"
+          git push
