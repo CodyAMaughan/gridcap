@@ -1,0 +1,25 @@
+{
+  "name": "gridcap",
+  "owner": {
+    "name": "Cody Maughan",
+    "url": "https://github.com/CodyAMaughan"
+  },
+  "metadata": {
+    "description": "Record macOS app windows to video with gridcap, as a Claude Code plugin."
+  },
+  "plugins": [
+    {
+      "name": "gridcap",
+      "source": "./plugin",
+      "description": "Record macOS app windows to video (one MP4 per window) and capture window screenshots, driven through the gridcap CLI.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Cody Maughan",
+        "url": "https://github.com/CodyAMaughan"
+      },
+      "homepage": "https://github.com/CodyAMaughan/gridcap",
+      "license": "MIT",
+      "keywords": ["screen-recording", "screenshot", "macos", "video"]
+    }
+  ]
+}

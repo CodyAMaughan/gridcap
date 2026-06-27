@@ -7,12 +7,14 @@ let package = Package(
     platforms: [.macOS(.v13)],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.2.0"),
+        .package(url: "https://github.com/modelcontextprotocol/swift-sdk", from: "0.11.0"),
     ],
     targets: [
         .executableTarget(
             name: "gridcap",
             dependencies: [
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                .product(name: "MCP", package: "swift-sdk"),
             ],
             path: "Sources/GridCap"
         ),

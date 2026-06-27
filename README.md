@@ -3,7 +3,7 @@
 A headless macOS CLI for **recording individual windows** — one MP4 per window, all
 captured at once and kept frame-synced — built on
 [ScreenCaptureKit](https://developer.apple.com/documentation/screencapturekit) and
-AVFoundation.
+AVFoundation. It also runs as an **MCP server** so AI agents can drive it directly.
 
 macOS gives you the building blocks (ScreenCaptureKit, `screencapture`) but no
 command-line tool that records *multiple specific windows simultaneously, each to its
@@ -23,22 +23,41 @@ paused, resumed, and reshaped (add/remove windows) while it runs over a control 
 - **Window management** — `list` enumerates windows as JSON; `arrange` moves/resizes a
   window before you record it.
 - **Stills too** — `screenshot` captures a single window to PNG.
-- **Headless & scriptable** — JSON on stdout, status/diagnostics on stderr, no GUI. Runs
-  fine when spawned from a non-interactive shell (e.g. by an IDE agent).
+- **Agent-ready** — drive it as a [Claude Code plugin](#claude-code-skill--cli-plugin),
+  or as an [MCP server](#mcp-server-codex-cursor-zed-claude-code-) from any MCP-capable
+  harness. JSON on stdout, no GUI, works when spawned from a non-interactive shell.
 
 ## Requirements
 
 - macOS 13 (Ventura) or later
-- Swift 5.7+ toolchain (Xcode 14+ or the Swift toolchain) to build
+- Swift 6 toolchain (Xcode 16+) to build from source
+
+## Install
+
+### Homebrew (recommended)
+
+```bash
+brew install CodyAMaughan/tap/gridcap
+```
+
+### From source
+
+```bash
+git clone https://github.com/CodyAMaughan/gridcap.git
+cd gridcap
+swift build -c release
+cp .build/release/gridcap /usr/local/bin/   # optional: put it on your PATH
+```
 
 ## Permissions
 
 `gridcap` needs two macOS privacy grants. The terminal app you run it from (Terminal,
-iTerm2, etc.) is what actually gets listed in System Settings — grant it there.
+iTerm2, etc.) — or the agent that launches it — is what actually gets listed in System
+Settings; grant it there.
 
 | Permission | Needed for | Where to grant |
 |---|---|---|
-| **Screen Recording** | `list`, `screenshot`, `record` | System Settings → Privacy & Security → Screen Recording |
+| **Screen Recording** | `list`, `screenshot`, `record`, `mcp` | System Settings → Privacy & Security → Screen Recording |
 | **Accessibility** | `arrange` (moving/resizing windows) | System Settings → Privacy & Security → Accessibility |
 
 Check what's currently granted:
@@ -48,20 +67,10 @@ gridcap list --check-permission
 # { "accessibility": "granted", "screen_recording": "granted" }
 ```
 
-If Screen Recording was just enabled, fully quit and reopen your terminal so the new
-grant takes effect.
+If Screen Recording was just enabled, fully quit and reopen your terminal (or restart the
+agent) so the new grant takes effect.
 
-## Build & install
-
-```bash
-swift build -c release
-# binary at .build/release/gridcap
-
-# optional: put it on your PATH
-cp .build/release/gridcap /usr/local/bin/
-```
-
-## Usage
+## CLI usage
 
 The normal flow is **list → (optionally) arrange → record → stop**.
 
@@ -140,10 +149,83 @@ Each session listens on a Unix domain socket at `/tmp/gridcap-<session-id>.sock`
 clients over it: they send a one-line JSON request and print the JSON response. You can
 speak the protocol directly if you'd rather not shell out per command.
 
+## Use it from an AI agent
+
+gridcap is built to be driven by coding agents. There are two ways in, and you can use
+either (or both):
+
+### Claude Code: skill + CLI plugin
+
+The primary path for [Claude Code](https://claude.com/claude-code). It bundles a **skill**
+that teaches the agent the full gridcap workflow (check permissions → list → arrange →
+record → control → stop) and drives the `gridcap` CLI directly — no extra server process.
+
+```bash
+# Install the gridcap binary first (see Install above), then in Claude Code:
+/plugin marketplace add CodyAMaughan/gridcap
+/plugin install gridcap@gridcap
+```
+
+Once installed, just ask Claude Code to "record the Safari window" (or similar) and the
+skill kicks in. The skill expects `gridcap` on your `PATH`.
+
+### MCP server (Codex, Cursor, Zed, Claude Code, …)
+
+The same binary runs as a [Model Context Protocol](https://modelcontextprotocol.io)
+server over stdio — the portable path that works in any MCP-capable harness. It exposes
+these tools: `check_permissions`, `list_windows`, `arrange_window`, `screenshot_window`,
+`start_recording`, `recording_status`, `pause_recording`, `resume_recording`,
+`add_window`, `remove_window`, `stop_recording`.
+
+Run it directly to see it speak MCP:
+
+```bash
+gridcap mcp
+```
+
+**OpenAI Codex** — register it once:
+
+```bash
+codex mcp add gridcap -- gridcap mcp
+```
+
+or in `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.gridcap]
+command = "gridcap"
+args = ["mcp"]
+```
+
+**Claude Code** (if you prefer MCP over the plugin):
+
+```bash
+claude mcp add gridcap -- gridcap mcp
+```
+
+**Generic MCP client** (Cursor, Zed, Windsurf, etc.) — point it at the command
+`gridcap` with argument `mcp`. The equivalent JSON most clients accept:
+
+```json
+{
+  "mcpServers": {
+    "gridcap": {
+      "command": "gridcap",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+`start_recording` launches a background session and returns a `session_id`; use the
+`recording_status` / `pause_recording` / `resume_recording` / `stop_recording` tools with
+that id to drive it, exactly like the CLI.
+
 ## Output format
 
 - **stdout** — machine-readable JSON only (pretty-printed, sorted keys).
 - **stderr** — human status lines; per-frame debug detail only with `--verbose`.
+  (The `mcp` subcommand keeps stdout reserved for the MCP protocol.)
 
 This split means you can pipe stdout straight into `jq` or a parser without filtering.
 
@@ -159,4 +241,5 @@ swift test       # run the test suite
 [MIT](LICENSE) © Cody Maughan
 
 Built on Apple's ScreenCaptureKit and AVFoundation. Depends on
-[swift-argument-parser](https://github.com/apple/swift-argument-parser) (Apache-2.0).
+[swift-argument-parser](https://github.com/apple/swift-argument-parser) and the
+[Swift MCP SDK](https://github.com/modelcontextprotocol/swift-sdk) (both Apache-2.0).

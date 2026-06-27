@@ -16,7 +16,7 @@ struct ListCommand: AsyncParsableCommand {
 
     func run() async throws {
         if checkPermission {
-            let status = await checkPermissions()
+            let status = await WindowManager.permissionStatus()
             let data = try JSONEncoder.prettyEncoder.encode(status)
             print(String(data: data, encoding: .utf8)!)
             return
@@ -25,25 +25,6 @@ struct ListCommand: AsyncParsableCommand {
         let windows = try await WindowManager.listWindows(appFilter: appFilter)
         let data = try JSONEncoder.prettyEncoder.encode(windows)
         print(String(data: data, encoding: .utf8)!)
-    }
-
-    private func checkPermissions() async -> PermissionStatus {
-        // Screen recording: try listing windows. If it works, we have permission.
-        var screenStatus = "unknown"
-        do {
-            _ = try await WindowManager.listWindows()
-            screenStatus = "granted"
-        } catch {
-            screenStatus = "denied"
-        }
-
-        // Accessibility: check via AXIsProcessTrusted()
-        let axStatus = WindowManager.isAccessibilityGranted() ? "granted" : "denied"
-
-        return PermissionStatus(
-            screen_recording: screenStatus,
-            accessibility: axStatus
-        )
     }
 }
 

@@ -3,6 +3,8 @@ import ScreenCaptureKit
 import AppKit
 import CoreGraphics
 import ApplicationServices
+import ImageIO
+import UniformTypeIdentifiers
 
 /// Enumerates windows via ScreenCaptureKit and manipulates them via Accessibility API.
 enum WindowManager {
@@ -105,6 +107,57 @@ enum WindowManager {
 
     static func isAccessibilityGranted() -> Bool {
         return AXIsProcessTrusted()
+    }
+
+    /// Report current Screen Recording and Accessibility permission status.
+    /// Screen Recording is probed by attempting to enumerate windows.
+    static func permissionStatus() async -> PermissionStatus {
+        var screenStatus = "unknown"
+        do {
+            _ = try await listWindows()
+            screenStatus = "granted"
+        } catch {
+            screenStatus = "denied"
+        }
+        let axStatus = isAccessibilityGranted() ? "granted" : "denied"
+        return PermissionStatus(screen_recording: screenStatus, accessibility: axStatus)
+    }
+
+    // MARK: - Screenshot
+
+    /// Capture a single window to a PNG file. Shared by the `screenshot` command and MCP tool.
+    static func captureScreenshot(windowID: UInt32, outputPath: String) throws -> ScreenshotResult {
+        guard let image = CGWindowListCreateImage(
+            .null,
+            .optionIncludingWindow,
+            CGWindowID(windowID),
+            [.boundsIgnoreFraming, .bestResolution]
+        ) else {
+            throw GridCapError.captureError("Failed to capture window \(windowID). Check screen recording permission.")
+        }
+
+        let outputURL = URL(fileURLWithPath: outputPath)
+        try FileManager.default.createDirectory(
+            at: outputURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+
+        guard let dest = CGImageDestinationCreateWithURL(
+            outputURL as CFURL, UTType.png.identifier as CFString, 1, nil
+        ) else {
+            throw GridCapError.captureError("Failed to create image destination at \(outputPath)")
+        }
+        CGImageDestinationAddImage(dest, image, nil)
+        guard CGImageDestinationFinalize(dest) else {
+            throw GridCapError.captureError("Failed to write PNG to \(outputPath)")
+        }
+
+        return ScreenshotResult(
+            status: "ok",
+            path: outputURL.path,
+            width: image.width,
+            height: image.height
+        )
     }
 
     // MARK: - Helpers

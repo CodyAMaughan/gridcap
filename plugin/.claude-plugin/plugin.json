@@ -1,0 +1,13 @@
+{
+  "name": "gridcap",
+  "version": "0.1.0",
+  "description": "Record macOS app windows to video (one MP4 per window) and capture window screenshots, driven through the gridcap CLI.",
+  "author": {
+    "name": "Cody Maughan",
+    "url": "https://github.com/CodyAMaughan"
+  },
+  "homepage": "https://github.com/CodyAMaughan/gridcap",
+  "repository": "https://github.com/CodyAMaughan/gridcap",
+  "license": "MIT",
+  "keywords": ["screen-recording", "screenshot", "macos", "video", "window-capture"]
+}

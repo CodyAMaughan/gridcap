@@ -11,6 +11,7 @@ struct GridCap: AsyncParsableCommand {
             ArrangeCommand.self,
             ScreenshotCommand.self,
             RecordCommand.self,
+            MCPCommand.self,
             StopCommand.self,
             PauseCommand.self,
             ResumeCommand.self,
