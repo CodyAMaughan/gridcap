@@ -236,6 +236,34 @@ swift build      # debug build
 swift test       # run the test suite
 ```
 
+## Releasing
+
+Releases are automated by [`.github/workflows/release.yml`](.github/workflows/release.yml).
+Pushing a `v*` tag builds and tests the binary on Apple Silicon, verifies its
+`--version` matches the tag, publishes a GitHub Release with the prebuilt
+`gridcap-<version>-macos-arm64.tar.gz` attached, and updates the Homebrew tap formula
+(`version` / `url` / `sha256`).
+
+To cut a release:
+
+1. Bump the version everywhere it's hard-coded: `Sources/GridCap/GridCap.swift`
+   (`version:`), the MCP server version in `Sources/GridCap/Commands/MCPCommand.swift`,
+   `plugin/.claude-plugin/plugin.json`, and `.claude-plugin/marketplace.json`.
+2. Commit, then tag and push:
+
+   ```bash
+   git tag -a v0.2.0 -m "gridcap 0.2.0"
+   git push origin v0.2.0
+   ```
+
+**One-time setup for the tap auto-update.** The workflow runs in this repo but pushes the
+formula change to the separate [`homebrew-tap`](https://github.com/CodyAMaughan/homebrew-tap)
+repo, which the built-in `GITHUB_TOKEN` can't reach. Create a **fine-grained personal
+access token** scoped to the `homebrew-tap` repo with **Contents: Read and write**, and
+save it on this repo as an Actions secret named **`HOMEBREW_TAP_TOKEN`**
+(Settings → Secrets and variables → Actions). Without it, the release still publishes —
+only the tap update is skipped (the run logs the version and sha256 to apply by hand).
+
 ## License
 
 [MIT](LICENSE) © Cody Maughan
