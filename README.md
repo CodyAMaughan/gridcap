@@ -1,5 +1,7 @@
 # gridcap
 
+[![ci](https://github.com/CodyAMaughan/gridcap/actions/workflows/ci.yml/badge.svg)](https://github.com/CodyAMaughan/gridcap/actions/workflows/ci.yml)
+
 A headless macOS CLI for **recording individual windows** — one MP4 per window, all
 captured at once and kept frame-synced — built on
 [ScreenCaptureKit](https://developer.apple.com/documentation/screencapturekit) and

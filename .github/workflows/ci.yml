@@ -1,0 +1,26 @@
+# Continuous integration: build and test on every push and pull request.
+# Release packaging lives in release.yml (tag-triggered); this just keeps `main`
+# and PRs honest. Tag pushes are skipped here since release.yml already builds + tests.
+
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: macos-15 # Apple Silicon, ships Swift 6 (required by the MCP SDK)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: swift --version
+
+      - name: Build
+        run: swift build -c release
+
+      - name: Test
+        run: swift test
